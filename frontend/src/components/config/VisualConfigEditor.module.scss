@@ -1,0 +1,68 @@
+.payloadRuleModelRow {
+  display: grid;
+  grid-template-columns: 1fr 160px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.payloadRuleModelRowProtocolFirst {
+  grid-template-columns: 160px 1fr auto;
+}
+
+.payloadRuleParamRow {
+  display: grid;
+  grid-template-columns: 1fr 140px 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.payloadRuleParamGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.payloadJsonInput {
+  min-height: 96px;
+  resize: vertical;
+  font-family: 'Consolas', 'Monaco', 'Menlo', monospace;
+}
+
+.payloadParamError {
+  margin: 0;
+}
+
+.payloadFilterModelRow {
+  display: grid;
+  grid-template-columns: 1fr 160px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.apiKeyModalInputRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+
+  :global(.input) {
+    flex: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .payloadRuleModelRow,
+  .payloadRuleModelRowProtocolFirst,
+  .payloadRuleParamRow,
+  .payloadFilterModelRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .apiKeyModalInputRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .payloadRowActionButton {
+    width: 100%;
+  }
+}
