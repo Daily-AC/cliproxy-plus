@@ -10,7 +10,8 @@ export type OAuthProvider =
   | 'antigravity'
   | 'gemini-cli'
   | 'kimi'
-  | 'qwen';
+  | 'qwen'
+  | 'github-copilot';
 
 export interface OAuthStartResponse {
   url: string;

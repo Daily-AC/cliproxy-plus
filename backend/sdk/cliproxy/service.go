@@ -421,6 +421,8 @@ func (s *Service) ensureExecutorsForAuthWithMode(a *coreauth.Auth, forceReplace 
 		s.coreManager.RegisterExecutor(executor.NewAntigravityExecutor(s.cfg))
 	case "claude":
 		s.coreManager.RegisterExecutor(executor.NewClaudeExecutor(s.cfg))
+	case "anyrouter":
+		s.coreManager.RegisterExecutor(executor.NewAnyRouterExecutor(s.cfg))
 	case "qwen":
 		s.coreManager.RegisterExecutor(executor.NewQwenExecutor(s.cfg))
 	case "iflow":
@@ -828,6 +830,8 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 			}
 		}
 		models = applyExcludedModels(models, excluded)
+	case "anyrouter":
+		models = buildAnyRouterModels()
 	case "codex":
 		models = registry.GetOpenAIModels()
 		if entry := s.resolveConfigCodexKey(a); entry != nil {
@@ -1324,6 +1328,21 @@ func buildClaudeConfigModels(entry *config.ClaudeKey) []*ModelInfo {
 		return nil
 	}
 	return buildConfigModels(entry.Models, "anthropic", "claude")
+}
+
+func buildAnyRouterModels() []*ModelInfo {
+	models := make([]*ModelInfo, 0, len(config.AnyRouterModels))
+	for _, modelID := range config.AnyRouterModels {
+		models = append(models, &ModelInfo{
+			ID:          modelID,
+			Object:      "model",
+			Created:     time.Now().Unix(),
+			OwnedBy:     "anyrouter",
+			Type:        "claude",
+			DisplayName: modelID,
+		})
+	}
+	return models
 }
 
 func buildCodexConfigModels(entry *config.CodexKey) []*ModelInfo {

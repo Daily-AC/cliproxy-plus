@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
   AmpcodeSection,
+  AnyRouterSection,
   ClaudeSection,
   CodexSection,
   GeminiSection,
@@ -18,6 +19,7 @@ import {
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { ampcodeApi, providersApi } from '@/services/api';
 import { useAuthStore, useConfigStore, useNotificationStore, useThemeStore } from '@/stores';
+import { anyRouterApi, type AnyRouterKeyConfig } from '@/services/api/anyrouter';
 import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
 import styles from './AiProvidersPage.module.scss';
 
@@ -53,6 +55,7 @@ export function AiProvidersPage() {
   const [openaiProviders, setOpenaiProviders] = useState<OpenAIProviderConfig[]>(
     () => config?.openaiCompatibility || []
   );
+  const [anyRouterConfigs, setAnyRouterConfigs] = useState<AnyRouterKeyConfig[]>([]);
 
   const [configSwitchingKey, setConfigSwitchingKey] = useState<string | null>(null);
 
@@ -74,10 +77,11 @@ export function AiProvidersPage() {
     }
     setError('');
     try {
-      const [configResult, vertexResult, ampcodeResult] = await Promise.allSettled([
+      const [configResult, vertexResult, ampcodeResult, anyRouterResult] = await Promise.allSettled([
         fetchConfig(),
         providersApi.getVertexConfigs(),
         ampcodeApi.getAmpcode(),
+        anyRouterApi.getKeys(),
       ]);
 
       if (configResult.status !== 'fulfilled') {
@@ -100,6 +104,10 @@ export function AiProvidersPage() {
       if (ampcodeResult.status === 'fulfilled') {
         updateConfigValue('ampcode', ampcodeResult.value);
         clearCache('ampcode');
+      }
+
+      if (anyRouterResult.status === 'fulfilled') {
+        setAnyRouterConfigs(anyRouterResult.value || []);
       }
     } catch (err: unknown) {
       const message = getErrorMessage(err) || t('notification.refresh_failed');
@@ -313,6 +321,28 @@ export function AiProvidersPage() {
     });
   };
 
+  const deleteAnyRouter = async (index: number) => {
+    const entry = anyRouterConfigs[index];
+    if (!entry) return;
+    showConfirmation({
+      title: t('ai_providers.anyrouter_delete_title', { defaultValue: 'Delete AnyRouter Key' }),
+      message: t('ai_providers.anyrouter_delete_confirm'),
+      variant: 'danger',
+      confirmText: t('common.confirm'),
+      onConfirm: async () => {
+        try {
+          await anyRouterApi.deleteKey(entry.apiKey);
+          const next = anyRouterConfigs.filter((_, idx) => idx !== index);
+          setAnyRouterConfigs(next);
+          showNotification(t('notification.anyrouter_key_deleted'), 'success');
+        } catch (err: unknown) {
+          const message = getErrorMessage(err);
+          showNotification(`${t('notification.delete_failed')}: ${message}`, 'error');
+        }
+      },
+    });
+  };
+
   const deleteOpenai = async (index: number) => {
     const entry = openaiProviders[index];
     if (!entry) return;
@@ -410,6 +440,18 @@ export function AiProvidersPage() {
             disableControls={disableControls}
             isSwitching={isSwitching}
             onEdit={() => openEditor('/ai-providers/ampcode')}
+          />
+        </div>
+
+        <div id="provider-anyrouter">
+          <AnyRouterSection
+            configs={anyRouterConfigs}
+            loading={loading}
+            disableControls={disableControls}
+            isSwitching={isSwitching}
+            onAdd={() => openEditor('/ai-providers/anyrouter/new')}
+            onEdit={(index) => openEditor(`/ai-providers/anyrouter/${index}`)}
+            onDelete={(index) => void deleteAnyRouter(index)}
           />
         </div>
 

@@ -21,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/access"
 	managementHandlers "github.com/router-for-me/CLIProxyAPI/v6/internal/api/handlers/management"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/checkin"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/api/middleware"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/api/modules"
 	ampmodule "github.com/router-for-me/CLIProxyAPI/v6/internal/api/modules/amp"
@@ -161,6 +162,9 @@ type Server struct {
 	// ampModule is the Amp routing module for model mapping hot-reload
 	ampModule *ampmodule.AmpModule
 
+	// anyRouterCheckIn manages scheduled AnyRouter sign-in operations
+	anyRouterCheckIn *checkin.AnyRouterCheckInManager
+
 	// managementRoutesRegistered tracks whether the management routes have been attached to the engine.
 	managementRoutesRegistered atomic.Bool
 	// managementRoutesEnabled controls whether management endpoints serve real handlers.
@@ -272,6 +276,11 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		s.mgmt.SetPostAuthHook(optionState.postAuthHook)
 	}
 	s.localPassword = optionState.localPassword
+
+	// Start AnyRouter check-in scheduler if configured
+	if len(cfg.AnyRouterKey) > 0 {
+		s.anyRouterCheckIn = checkin.NewAnyRouterCheckInManager(cfg)
+	}
 
 	// Setup routes
 	s.setupRoutes()
@@ -610,6 +619,12 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.PATCH("/vertex-api-key", s.mgmt.PatchVertexCompatKey)
 		mgmt.DELETE("/vertex-api-key", s.mgmt.DeleteVertexCompatKey)
 
+		mgmt.GET("/anyrouter-api-key", s.mgmt.GetAnyRouterKeys)
+		mgmt.PUT("/anyrouter-api-key", s.mgmt.PutAnyRouterKeys)
+		mgmt.DELETE("/anyrouter-api-key", s.mgmt.DeleteAnyRouterKey)
+		mgmt.POST("/anyrouter/check-in", s.mgmt.PostAnyRouterCheckIn)
+		mgmt.GET("/anyrouter/balance", s.mgmt.GetAnyRouterBalance)
+
 		mgmt.GET("/oauth-excluded-models", s.mgmt.GetOAuthExcludedModels)
 		mgmt.PUT("/oauth-excluded-models", s.mgmt.PutOAuthExcludedModels)
 		mgmt.PATCH("/oauth-excluded-models", s.mgmt.PatchOAuthExcludedModels)
@@ -823,6 +838,10 @@ func (s *Server) Start() error {
 func (s *Server) Stop(ctx context.Context) error {
 	log.Debug("Stopping API server...")
 
+	if s.anyRouterCheckIn != nil {
+		s.anyRouterCheckIn.Stop()
+	}
+
 	if s.keepAliveEnabled {
 		select {
 		case s.keepAliveStop <- struct{}{}:
@@ -972,6 +991,13 @@ func (s *Server) UpdateClients(cfg *config.Config) {
 		s.mgmt.SetAuthManager(s.handlers.AuthManager)
 	}
 
+	// Update AnyRouter check-in manager with new config
+	if s.anyRouterCheckIn != nil {
+		s.anyRouterCheckIn.SetConfig(cfg)
+	} else if len(cfg.AnyRouterKey) > 0 {
+		s.anyRouterCheckIn = checkin.NewAnyRouterCheckInManager(cfg)
+	}
+
 	// Notify Amp module only when Amp config has changed.
 	ampConfigChanged := oldCfg == nil || !reflect.DeepEqual(oldCfg.AmpCode, cfg.AmpCode)
 	if ampConfigChanged {
@@ -995,14 +1021,15 @@ func (s *Server) UpdateClients(cfg *config.Config) {
 	claudeAPIKeyCount := len(cfg.ClaudeKey)
 	codexAPIKeyCount := len(cfg.CodexKey)
 	vertexAICompatCount := len(cfg.VertexCompatAPIKey)
+	anyRouterAPIKeyCount := len(cfg.AnyRouterKey)
 	openAICompatCount := 0
 	for i := range cfg.OpenAICompatibility {
 		entry := cfg.OpenAICompatibility[i]
 		openAICompatCount += len(entry.APIKeyEntries)
 	}
 
-	total := authEntries + geminiAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + vertexAICompatCount + openAICompatCount
-	fmt.Printf("server clients and configuration updated: %d clients (%d auth entries + %d Gemini API keys + %d Claude API keys + %d Codex keys + %d Vertex-compat + %d OpenAI-compat)\n",
+	total := authEntries + geminiAPIKeyCount + claudeAPIKeyCount + codexAPIKeyCount + vertexAICompatCount + openAICompatCount + anyRouterAPIKeyCount
+	fmt.Printf("server clients and configuration updated: %d clients (%d auth entries + %d Gemini API keys + %d Claude API keys + %d Codex keys + %d Vertex-compat + %d OpenAI-compat + %d AnyRouter)\n",
 		total,
 		authEntries,
 		geminiAPIKeyCount,
@@ -1010,6 +1037,7 @@ func (s *Server) UpdateClients(cfg *config.Config) {
 		codexAPIKeyCount,
 		vertexAICompatCount,
 		openAICompatCount,
+		anyRouterAPIKeyCount,
 	)
 }
 
