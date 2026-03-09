@@ -104,6 +104,9 @@ type Config struct {
 	// Used for services that use Vertex AI-style paths but with simple API key authentication.
 	VertexCompatAPIKey []VertexCompatKey `yaml:"vertex-api-key" json:"vertex-api-key"`
 
+	// AnyRouterKey defines AnyRouter API key configurations for routing requests through anyrouter.top.
+	AnyRouterKey []AnyRouterKey `yaml:"anyrouter-api-key" json:"anyrouter-api-key"`
+
 	// AmpCode contains Amp CLI upstream configuration, management restrictions, and model mappings.
 	AmpCode AmpCode `yaml:"ampcode" json:"ampcode"`
 
@@ -498,6 +501,79 @@ type OpenAICompatibilityModel struct {
 func (m OpenAICompatibilityModel) GetName() string  { return m.Name }
 func (m OpenAICompatibilityModel) GetAlias() string { return m.Alias }
 
+// AnyRouterKey represents the configuration for an AnyRouter API key,
+// used for routing requests through anyrouter.top with request transformation.
+type AnyRouterKey struct {
+	// APIKey is the authentication key for accessing AnyRouter services.
+	APIKey string `yaml:"api-key" json:"api-key"`
+
+	// ProxyURL overrides the global proxy setting for this API key if provided.
+	ProxyURL string `yaml:"proxy-url,omitempty" json:"proxy-url,omitempty"`
+
+	// Priority controls selection preference when multiple credentials match.
+	// Higher values are preferred; defaults to 0.
+	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+
+	// CheckIn configures automatic daily sign-in for this AnyRouter account.
+	CheckIn AnyRouterCheckIn `yaml:"check-in,omitempty" json:"check-in,omitempty"`
+}
+
+func (k AnyRouterKey) GetAPIKey() string  { return k.APIKey }
+func (k AnyRouterKey) GetBaseURL() string { return "https://anyrouter.top" }
+
+// AnyRouterCheckIn configures automatic daily sign-in for an AnyRouter account.
+type AnyRouterCheckIn struct {
+	// Enabled controls whether automatic daily sign-in is active.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+
+	// UserID is the 5-digit numeric user ID, obtained from the browser Network tab (New-Api-User header).
+	UserID string `yaml:"user-id" json:"user-id"`
+
+	// SessionID is the session cookie value, obtained from browser Application > Cookies.
+	SessionID string `yaml:"session-id" json:"session-id"`
+
+	// WebhookURL is an optional Feishu webhook URL for sign-in result notifications.
+	WebhookURL string `yaml:"webhook-url,omitempty" json:"webhook-url,omitempty"`
+}
+
+// AnyRouterModels defines the hardcoded list of models available through AnyRouter.
+var AnyRouterModels = []string{
+	"claude-opus-4-6",
+	"claude-sonnet-4-6",
+	"claude-sonnet-4-5-20250929",
+	"claude-haiku-4-5-20251001",
+	"claude-opus-4-5-20251101",
+	"claude-opus-4-1-20250805",
+	"claude-sonnet-4-20250514",
+	"claude-opus-4-20250514",
+}
+
+// SanitizeAnyRouterKeys normalizes AnyRouter credentials.
+func (cfg *Config) SanitizeAnyRouterKeys() {
+	if cfg == nil || len(cfg.AnyRouterKey) == 0 {
+		return
+	}
+	seen := make(map[string]struct{}, len(cfg.AnyRouterKey))
+	out := cfg.AnyRouterKey[:0]
+	for i := range cfg.AnyRouterKey {
+		entry := cfg.AnyRouterKey[i]
+		entry.APIKey = strings.TrimSpace(entry.APIKey)
+		if entry.APIKey == "" {
+			continue
+		}
+		entry.ProxyURL = strings.TrimSpace(entry.ProxyURL)
+		entry.CheckIn.UserID = strings.TrimSpace(entry.CheckIn.UserID)
+		entry.CheckIn.SessionID = strings.TrimSpace(entry.CheckIn.SessionID)
+		entry.CheckIn.WebhookURL = strings.TrimSpace(entry.CheckIn.WebhookURL)
+		if _, exists := seen[entry.APIKey]; exists {
+			continue
+		}
+		seen[entry.APIKey] = struct{}{}
+		out = append(out, entry)
+	}
+	cfg.AnyRouterKey = out
+}
+
 // LoadConfig reads a YAML configuration file from the given path,
 // unmarshals it into a Config struct, applies environment variable overrides,
 // and returns it.
@@ -617,6 +693,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 
 	// Sanitize Claude key headers
 	cfg.SanitizeClaudeKeys()
+
+	// Sanitize AnyRouter keys
+	cfg.SanitizeAnyRouterKeys()
 
 	// Sanitize OpenAI compatibility providers: drop entries without base-url
 	cfg.SanitizeOpenAICompatibility()

@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores';
 import { authFilesApi, configFileApi } from '@/services/api';
 import {
   QuotaSection,
+  AnyRouterQuotaSection,
   ANTIGRAVITY_CONFIG,
   CLAUDE_CONFIG,
   CODEX_CONFIG,
@@ -101,6 +102,7 @@ export function QuotaPage() {
         loading={loading}
         disabled={disableControls}
       />
+      <AnyRouterQuotaSection disabled={disableControls} />
     </div>
   );
 }

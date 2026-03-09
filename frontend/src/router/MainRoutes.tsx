@@ -10,6 +10,7 @@ import { AiProvidersGeminiEditPage } from '@/pages/AiProvidersGeminiEditPage';
 import { AiProvidersOpenAIEditLayout } from '@/pages/AiProvidersOpenAIEditLayout';
 import { AiProvidersOpenAIEditPage } from '@/pages/AiProvidersOpenAIEditPage';
 import { AiProvidersOpenAIModelsPage } from '@/pages/AiProvidersOpenAIModelsPage';
+import { AiProvidersAnyRouterEditPage } from '@/pages/AiProvidersAnyRouterEditPage';
 import { AiProvidersVertexEditPage } from '@/pages/AiProvidersVertexEditPage';
 import { AuthFilesPage } from '@/pages/AuthFilesPage';
 import { AuthFilesOAuthExcludedEditPage } from '@/pages/AuthFilesOAuthExcludedEditPage';
@@ -46,6 +47,8 @@ const mainRoutes = [
       { path: 'models', element: <AiProvidersClaudeModelsPage /> },
     ],
   },
+  { path: '/ai-providers/anyrouter/new', element: <AiProvidersAnyRouterEditPage /> },
+  { path: '/ai-providers/anyrouter/:index', element: <AiProvidersAnyRouterEditPage /> },
   { path: '/ai-providers/vertex/new', element: <AiProvidersVertexEditPage /> },
   { path: '/ai-providers/vertex/:index', element: <AiProvidersVertexEditPage /> },
   {

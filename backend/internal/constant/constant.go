@@ -24,4 +24,7 @@ const (
 
 	// Antigravity represents the Antigravity response format identifier.
 	Antigravity = "antigravity"
+
+	// AnyRouter represents the AnyRouter provider identifier.
+	AnyRouter = "anyrouter"
 )

@@ -441,7 +441,40 @@
     "openai_test_all_hint": "测试所有密钥的连接状态",
     "openai_test_all_success": "所有 {{count}} 个密钥测试通过",
     "openai_test_all_failed": "所有 {{count}} 个密钥测试失败",
-    "openai_test_all_partial": "测试完成：{{success}} 个通过，{{failed}} 个失败"
+    "openai_test_all_partial": "测试完成：{{success}} 个通过，{{failed}} 个失败",
+    "anyrouter_title": "AnyRouter",
+    "anyrouter_add_button": "添加密钥",
+    "anyrouter_empty_title": "暂无 AnyRouter 密钥",
+    "anyrouter_empty_desc": "点击上方按钮添加第一个密钥",
+    "anyrouter_item_title": "AnyRouter 密钥",
+    "anyrouter_add_title": "添加 AnyRouter 密钥",
+    "anyrouter_edit_title": "编辑 AnyRouter 密钥",
+    "anyrouter_key_label": "API 密钥:",
+    "anyrouter_key_required": "请输入 API 密钥",
+    "anyrouter_proxy_label": "代理 URL (可选):",
+    "anyrouter_delete_title": "删除 AnyRouter 密钥",
+    "anyrouter_delete_confirm": "确定要删除这个 AnyRouter 密钥吗？",
+    "anyrouter_models_label": "可用模型",
+    "anyrouter_models_hint": "AnyRouter 支持的模型列表（只读）。",
+    "anyrouter_balance_title": "账户余额",
+    "anyrouter_balance_label": "余额",
+    "anyrouter_balance_unavailable": "余额暂不可用",
+    "anyrouter_balance_refreshed": "余额已刷新",
+    "anyrouter_balance_error": "获取余额失败",
+    "anyrouter_checkin_title": "自动签到",
+    "anyrouter_checkin_enabled_label": "启用",
+    "anyrouter_checkin_toggle_aria": "切换自动签到",
+    "anyrouter_checkin_hint": "配置 AnyRouter 自动签到，获取每日额度。",
+    "anyrouter_checkin_userid_label": "用户 ID:",
+    "anyrouter_checkin_userid_hint": "5 位数字用户 ID。",
+    "anyrouter_checkin_sessionid_label": "Session ID:",
+    "anyrouter_checkin_webhook_label": "飞书 Webhook URL (可选):",
+    "anyrouter_checkin_webhook_hint": "签到结果将推送到此飞书 Webhook。",
+    "anyrouter_checkin_trigger_label": "手动签到",
+    "anyrouter_checkin_trigger_hint": "立即执行一次签到操作。",
+    "anyrouter_checkin_trigger_button": "立即签到",
+    "anyrouter_checkin_success": "签到成功",
+    "anyrouter_checkin_failed": "签到失败"
   },
   "auth_files": {
     "title": "认证文件管理",
@@ -892,7 +925,18 @@
     "iflow_cookie_result_expired": "过期时间",
     "iflow_cookie_result_path": "保存路径",
     "iflow_cookie_result_type": "类型",
-    "remote_access_disabled": "远程访问不支持此登录方式，请从本地 (localhost) 访问"
+    "remote_access_disabled": "远程访问不支持此登录方式，请从本地 (localhost) 访问",
+    "github_copilot_oauth_title": "GitHub Copilot OAuth",
+    "github_copilot_oauth_button": "开始 GitHub Copilot 登录",
+    "github_copilot_oauth_hint": "通过 GitHub 设备授权流程登录 Copilot 服务，请在弹出页面输入设备代码完成授权。",
+    "github_copilot_oauth_url_label": "授权链接:",
+    "github_copilot_open_link": "打开链接",
+    "github_copilot_copy_link": "复制链接",
+    "github_copilot_oauth_status_waiting": "等待认证中...",
+    "github_copilot_oauth_status_success": "认证成功！",
+    "github_copilot_oauth_status_error": "认证失败:",
+    "github_copilot_oauth_start_error": "启动 GitHub Copilot OAuth 失败:",
+    "github_copilot_oauth_polling_error": "检查认证状态失败:"
   },
   "usage_stats": {
     "title": "使用统计",
@@ -1294,7 +1338,9 @@
     "description": "集中查看 OAuth 额度与剩余情况",
     "refresh_files": "刷新认证文件",
     "refresh_files_and_quota": "刷新认证文件&额度",
-    "card_idle_hint": "请使用顶部“刷新认证文件&额度”按钮获取最新额度。"
+    "card_idle_hint": "请使用顶部“刷新认证文件&额度”按钮获取最新额度。",
+    "anyrouter_title": "AnyRouter 余额",
+    "anyrouter_empty": "暂无 AnyRouter 密钥"
   },
   "system_info": {
     "title": "管理中心信息",
@@ -1405,7 +1451,8 @@
     "claude_api_key": "Claude API密钥",
     "commercial_mode_restart_required": "商业模式开关已变更，请重启服务后生效",
     "copy_failed": "复制失败",
-    "link_copied": "已复制"
+    "link_copied": "已复制",
+    "anyrouter_key_deleted": "AnyRouter 密钥删除成功"
   },
   "language": {
     "switch": "语言",

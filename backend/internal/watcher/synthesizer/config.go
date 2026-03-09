@@ -35,6 +35,8 @@ func (s *ConfigSynthesizer) Synthesize(ctx *SynthesisContext) ([]*coreauth.Auth,
 	out = append(out, s.synthesizeOpenAICompat(ctx)...)
 	// Vertex-compat
 	out = append(out, s.synthesizeVertexCompat(ctx)...)
+	// AnyRouter
+	out = append(out, s.synthesizeAnyRouterKeys(ctx)...)
 
 	return out, nil
 }
@@ -316,6 +318,44 @@ func (s *ConfigSynthesizer) synthesizeVertexCompat(ctx *SynthesisContext) []*cor
 			UpdatedAt:  now,
 		}
 		ApplyAuthExcludedModelsMeta(a, cfg, compat.ExcludedModels, "apikey")
+		out = append(out, a)
+	}
+	return out
+}
+
+// synthesizeAnyRouterKeys creates Auth entries for AnyRouter API keys.
+func (s *ConfigSynthesizer) synthesizeAnyRouterKeys(ctx *SynthesisContext) []*coreauth.Auth {
+	cfg := ctx.Config
+	now := ctx.Now
+	idGen := ctx.IDGenerator
+
+	out := make([]*coreauth.Auth, 0, len(cfg.AnyRouterKey))
+	for i := range cfg.AnyRouterKey {
+		entry := cfg.AnyRouterKey[i]
+		key := strings.TrimSpace(entry.APIKey)
+		if key == "" {
+			continue
+		}
+		id, token := idGen.Next("anyrouter:apikey", key)
+		attrs := map[string]string{
+			"source":   fmt.Sprintf("config:anyrouter[%s]", token),
+			"api_key":  key,
+			"base_url": "https://anyrouter.top",
+		}
+		if entry.Priority != 0 {
+			attrs["priority"] = strconv.Itoa(entry.Priority)
+		}
+		proxyURL := strings.TrimSpace(entry.ProxyURL)
+		a := &coreauth.Auth{
+			ID:         id,
+			Provider:   "anyrouter",
+			Label:      "anyrouter-apikey",
+			Status:     coreauth.StatusActive,
+			ProxyURL:   proxyURL,
+			Attributes: attrs,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
 		out = append(out, a)
 	}
 	return out
