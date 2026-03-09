@@ -8,6 +8,9 @@ import internalconfig "github.com/router-for-me/CLIProxyAPI/v6/internal/config"
 
 type SDKConfig = internalconfig.SDKConfig
 
+// AnyRouterModels is the hardcoded list of models available through AnyRouter.
+var AnyRouterModels = internalconfig.AnyRouterModels
+
 type Config = internalconfig.Config
 
 type StreamingConfig = internalconfig.StreamingConfig
