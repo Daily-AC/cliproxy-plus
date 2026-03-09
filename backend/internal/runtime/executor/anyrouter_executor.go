@@ -148,7 +148,7 @@ func (e *AnyRouterExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 			data,
 			&param,
 		)
-		resp.Payload = out
+		resp.Payload = []byte(out)
 		resp.Headers = httpResp.Header.Clone()
 		return resp, nil
 	}
