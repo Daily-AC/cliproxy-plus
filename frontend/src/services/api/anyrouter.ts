@@ -8,6 +8,8 @@ export interface AnyRouterKeyConfig {
   apiKey: string;
   priority?: number;
   proxyUrl?: string;
+  label?: string;
+  enabled?: boolean;  // undefined = true
   checkIn?: {
     enabled: boolean;
     userId?: string;
@@ -46,6 +48,9 @@ const normalizeKeyConfig = (raw: unknown): AnyRouterKeyConfig | null => {
 
   const priority = typeof raw.priority === 'number' ? raw.priority : undefined;
   const proxyUrl = String(raw['proxy-url'] ?? raw.proxyUrl ?? '').trim() || undefined;
+  const label = String(raw.label ?? '').trim() || undefined;
+  const enabledRaw = raw.enabled;
+  const enabled = enabledRaw === undefined || enabledRaw === null ? undefined : Boolean(enabledRaw);
 
   let checkIn: AnyRouterKeyConfig['checkIn'];
   const rawCheckIn = raw['check-in'] ?? raw.checkIn;
@@ -58,13 +63,15 @@ const normalizeKeyConfig = (raw: unknown): AnyRouterKeyConfig | null => {
     };
   }
 
-  return { apiKey, priority, proxyUrl, checkIn };
+  return { apiKey, priority, proxyUrl, label, enabled, checkIn };
 };
 
 const serializeKeyConfig = (config: AnyRouterKeyConfig) => {
   const payload: Record<string, unknown> = { 'api-key': config.apiKey };
   if (config.priority !== undefined) payload.priority = config.priority;
   if (config.proxyUrl) payload['proxy-url'] = config.proxyUrl;
+  if (config.label) payload.label = config.label;
+  if (config.enabled !== undefined) payload.enabled = config.enabled;
   if (config.checkIn) {
     const checkInPayload: Record<string, unknown> = { enabled: config.checkIn.enabled };
     if (config.checkIn.userId) checkInPayload['user-id'] = config.checkIn.userId;

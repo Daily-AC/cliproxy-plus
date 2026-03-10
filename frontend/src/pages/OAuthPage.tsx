@@ -23,6 +23,7 @@ import iconVertex from '@/assets/icons/vertex.svg';
 interface ProviderState {
   url?: string;
   state?: string;
+  userCode?: string;
   status?: 'idle' | 'waiting' | 'success' | 'error';
   error?: string;
   polling?: boolean;
@@ -179,7 +180,7 @@ export function OAuthPage() {
         provider,
         provider === 'gemini-cli' ? { projectId: projectId || undefined } : undefined
       );
-      updateProviderState(provider, { url: res.url, state: res.state, status: 'waiting', polling: true });
+      updateProviderState(provider, { url: res.url, state: res.state, userCode: res.user_code, status: 'waiting', polling: true });
       if (res.state) {
         startPolling(provider, res.state);
       }
@@ -390,6 +391,15 @@ export function OAuthPage() {
                     <div className={styles.authUrlBox}>
                       <div className={styles.authUrlLabel}>{t(provider.urlLabelKey)}</div>
                       <div className={styles.authUrlValue}>{state.url}</div>
+                      {state.userCode && (
+                        <div className={styles.deviceCodeRow}>
+                          <span className={styles.deviceCodeLabel}>{t('auth_login.device_code_label')}</span>
+                          <code className={styles.deviceCode}>{state.userCode}</code>
+                          <Button variant="secondary" size="sm" onClick={() => copyLink(state.userCode!)}>
+                            {t('auth_login.copy_code')}
+                          </Button>
+                        </div>
+                      )}
                       <div className={styles.authUrlActions}>
                         <Button variant="secondary" size="sm" onClick={() => copyLink(state.url!)}>
                           {t(getAuthKey(provider.id, 'copy_link'))}

@@ -936,7 +936,9 @@
     "github_copilot_oauth_status_success": "认证成功！",
     "github_copilot_oauth_status_error": "认证失败:",
     "github_copilot_oauth_start_error": "启动 GitHub Copilot OAuth 失败:",
-    "github_copilot_oauth_polling_error": "检查认证状态失败:"
+    "github_copilot_oauth_polling_error": "检查认证状态失败:",
+    "device_code_label": "设备码:",
+    "copy_code": "复制"
   },
   "usage_stats": {
     "title": "使用统计",
@@ -1340,7 +1342,13 @@
     "refresh_files_and_quota": "刷新认证文件&额度",
     "card_idle_hint": "请使用顶部“刷新认证文件&额度”按钮获取最新额度。",
     "anyrouter_title": "AnyRouter 余额",
-    "anyrouter_empty": "暂无 AnyRouter 密钥"
+    "anyrouter_empty": "暂无 AnyRouter 密钥",
+    "github_copilot_title": "GitHub Copilot",
+    "github_copilot_empty": "未配置 GitHub Copilot 凭证",
+    "github_copilot_subscription": "订阅状态",
+    "github_copilot_active": "活跃",
+    "github_copilot_inactive": "未激活",
+    "github_copilot_models": "可用模型"
   },
   "system_info": {
     "title": "管理中心信息",

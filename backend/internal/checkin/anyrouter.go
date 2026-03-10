@@ -4,10 +4,12 @@ package checkin
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -102,7 +104,7 @@ func (m *AnyRouterCheckInManager) checkInAll(ctx context.Context) {
 		if err != nil {
 			log.Errorf("anyrouter check-in failed for key %d: %v", i, err)
 			if entry.CheckIn.WebhookURL != "" {
-				_ = sendWebhook(ctx, entry.CheckIn.WebhookURL, fmt.Sprintf("AnyRouter check-in failed: %v", err))
+				_ = SendWebhook(ctx, entry.CheckIn.WebhookURL, fmt.Sprintf("AnyRouter check-in failed: %v", err))
 			}
 			continue
 		}
@@ -117,7 +119,7 @@ func (m *AnyRouterCheckInManager) checkInAll(ctx context.Context) {
 
 		log.Infof("anyrouter check-in key %d: %s", i, msg)
 		if entry.CheckIn.WebhookURL != "" {
-			_ = sendWebhook(ctx, entry.CheckIn.WebhookURL, msg)
+			_ = SendWebhook(ctx, entry.CheckIn.WebhookURL, msg)
 		}
 	}
 }
@@ -220,28 +222,98 @@ type BalanceResult struct {
 	Error   string  `json:"error,omitempty"`
 }
 
-// CheckIn performs a single sign-in request to AnyRouter.
-func CheckIn(ctx context.Context, userID, sessionID string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, anyRouterSignIn, nil)
+// acw_sc__v2 WAF challenge solver
+var (
+	acwArg1Re      = regexp.MustCompile(`var arg1='([0-9A-Fa-f]{40})'`)
+	acwPermutation = []int{15, 35, 29, 24, 33, 16, 1, 38, 10, 9, 19, 31, 40, 27, 22, 23, 25, 13, 6, 11, 39, 18, 20, 8, 14, 21, 32, 26, 2, 30, 7, 4, 17, 5, 3, 28, 34, 37, 12, 36}
+	acwKey         = "3000176000856006061501533003690027800375"
+)
+
+func solveACWChallenge(body []byte) (string, bool) {
+	m := acwArg1Re.FindSubmatch(body)
+	if m == nil {
+		return "", false
+	}
+	arg1 := string(m[1])
+	reordered := make([]byte, len(acwPermutation))
+	for i := 0; i < len(arg1) && i < len(acwPermutation); i++ {
+		for j := 0; j < len(acwPermutation); j++ {
+			if acwPermutation[j] == i+1 {
+				reordered[j] = arg1[i]
+			}
+		}
+	}
+	u := string(reordered)
+	minLen := len(u)
+	if len(acwKey) < minLen {
+		minLen = len(acwKey)
+	}
+	var result strings.Builder
+	for i := 0; i+1 < minLen; i += 2 {
+		uByte, err1 := hex.DecodeString(u[i : i+2])
+		kByte, err2 := hex.DecodeString(acwKey[i : i+2])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		result.WriteString(fmt.Sprintf("%02x", uByte[0]^kByte[0]))
+	}
+	return result.String(), true
+}
+
+func doWithACW(ctx context.Context, method, url string, userID, sessionID string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Cookie", fmt.Sprintf("session=%s", sessionID))
 	req.Header.Set("New-Api-User", userID)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
+		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+	acwCookie, isChallenge := solveACWChallenge(respBody)
+	if !isChallenge {
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(respBody))
+		}
+		return respBody, nil
+	}
+
+	log.Debugf("anyrouter: solved acw_sc__v2 challenge, retrying")
+	req2, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create retry request: %w", err)
+	}
+	req2.Header.Set("Cookie", fmt.Sprintf("session=%s; acw_sc__v2=%s", sessionID, acwCookie))
+	req2.Header.Set("New-Api-User", userID)
+
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		return nil, fmt.Errorf("retry request failed: %w", err)
+	}
+	defer resp2.Body.Close()
+	respBody2, err := io.ReadAll(resp2.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read retry response: %w", err)
+	}
+	if resp2.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d: %s", resp2.StatusCode, string(respBody2))
+	}
+	return respBody2, nil
+}
+
+// CheckIn performs a single sign-in request to AnyRouter.
+func CheckIn(ctx context.Context, userID, sessionID string) (string, error) {
+	body, err := doWithACW(ctx, http.MethodPost, anyRouterSignIn, userID, sessionID)
+	if err != nil {
+		return "", err
 	}
 
 	var result struct {
@@ -260,26 +332,9 @@ func CheckIn(ctx context.Context, userID, sessionID string) (string, error) {
 
 // QueryBalance queries the current user balance from AnyRouter.
 func QueryBalance(ctx context.Context, userID, sessionID string) (float64, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, anyRouterUserSelf, nil)
+	body, err := doWithACW(ctx, http.MethodGet, anyRouterUserSelf, userID, sessionID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Cookie", fmt.Sprintf("session=%s", sessionID))
-	req.Header.Set("New-Api-User", userID)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+		return 0, err
 	}
 
 	var result struct {
@@ -300,7 +355,8 @@ func QueryBalance(ctx context.Context, userID, sessionID string) (float64, error
 }
 
 // sendWebhook sends a notification to a Feishu webhook URL.
-func sendWebhook(ctx context.Context, webhookURL, message string) error {
+// SendWebhook sends a notification to a Feishu webhook URL.
+func SendWebhook(ctx context.Context, webhookURL, message string) error {
 	if strings.TrimSpace(webhookURL) == "" {
 		return nil
 	}
