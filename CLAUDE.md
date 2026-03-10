@@ -1,6 +1,6 @@
 # AI Deployment Guide
 
-This document is for AI coding assistants (Claude Code, Cursor, etc.) working on this codebase.
+This document is for AI coding assistants (Claude Code, Cursor, etc.) helping deploy and develop this codebase.
 
 ## Project Overview
 
@@ -26,48 +26,112 @@ npm install    # first time only
 npm run build  # outputs dist/index.html (~2.2MB single file)
 ```
 
-## Deployment to LD Server
+## Deployment
 
-The production server is at `ssh ld` (86.53.183.23). Service runs on port 8317 behind Caddy reverse proxy + Cloudflare CDN at `https://cliproxy.qmledmq.cn`.
+### Prerequisites
+
+- A Linux server (amd64) with public IP
+- Go 1.26+ (for building, can cross-compile from another machine)
+- Node.js 20+ / npm (for frontend build)
+- A reverse proxy (Caddy / Nginx) for HTTPS termination (recommended)
+
+### Directory Layout
+
+Create a working directory on your server (e.g., `/opt/cliproxyapi/`):
+
+```
+/opt/cliproxyapi/
+├── cliproxyapi          # Binary
+├── config.yaml          # Configuration
+├── auths/               # Auth credential files (auto-generated)
+└── static/
+    └── management.html  # Frontend HTML (from frontend/dist/index.html)
+```
+
+### Minimal config.yaml
+
+```yaml
+api-key:
+  - your-api-key-here
+auth-dir: ./auths
+proxy-url: ''            # HTTPS proxy if needed, empty for direct connection
+remote-management:
+  allow-remote: true
+  disable-control-panel: false
+  secret-key: <bcrypt-hash-of-your-management-password>
+```
+
+Generate bcrypt hash: `htpasswd -nbBC 10 "" 'your-password' | cut -d: -f2`
 
 ### Deploy Steps
 
 ```bash
-# 1. Build
+# 1. Build (on your dev machine)
 cd backend && GOOS=linux GOARCH=amd64 go build -o /tmp/cliproxyapi-linux ./cmd/server/
 cd ../frontend && npm run build
 
-# 2. Upload
-scp /tmp/cliproxyapi-linux ld:/tmp/cliproxyapi-new
-scp frontend/dist/index.html ld:/root/cliproxyapi/static/management.html
+# 2. Upload to server
+scp /tmp/cliproxyapi-linux yourserver:/opt/cliproxyapi/cliproxyapi
+scp frontend/dist/index.html yourserver:/opt/cliproxyapi/static/management.html
 
-# 3. Restart (on LD)
-ssh ld
-kill -9 $(lsof -t -i :8317 | head -1)
-sleep 2
-cp /tmp/cliproxyapi-new /root/cliproxyapi/cliproxyapi
-chmod +x /root/cliproxyapi/cliproxyapi
-cd /root/cliproxyapi
+# 3. Start on server
+ssh yourserver
+chmod +x /opt/cliproxyapi/cliproxyapi
+cd /opt/cliproxyapi
 nohup ./cliproxyapi server --config ./config.yaml >> /tmp/cliproxyapi.log 2>&1 &
-systemctl restart caddy
 ```
 
-### Important Paths on LD
+### Updating (restart)
 
-| Path | Description |
-|------|-------------|
-| `/root/cliproxyapi/cliproxyapi` | Binary |
-| `/root/cliproxyapi/config.yaml` | Config |
-| `/root/cliproxyapi/auths/` | Auth credential files |
-| `/root/cliproxyapi/static/management.html` | Frontend HTML (**not** `/root/cliproxyapi/management.html`) |
-| `/tmp/cliproxyapi.log` | Runtime logs |
+```bash
+# Kill old process
+kill -9 $(lsof -t -i :8317 | head -1)
+sleep 2
+
+# Replace binary and restart
+cp /tmp/cliproxyapi-new /opt/cliproxyapi/cliproxyapi
+chmod +x /opt/cliproxyapi/cliproxyapi
+cd /opt/cliproxyapi
+nohup ./cliproxyapi server --config ./config.yaml >> /tmp/cliproxyapi.log 2>&1 &
+```
+
+### Reverse Proxy (Caddy example)
+
+```
+your-domain.com {
+    reverse_proxy localhost:8317
+}
+```
+
+Service runs on port **8317** by default.
 
 ### Common Gotchas
 
-1. **Frontend path**: Management HTML must go to `static/management.html` relative to config dir, NOT the config dir itself. The backend auto-updater may also overwrite this file.
-2. **Caddy dies on restart**: When killing the CLIProxyAPI process, Caddy sometimes stops too. Always run `systemctl restart caddy` after restarting the service.
-3. **Port busy**: Use `lsof -t -i :8317` to find and `kill -9` the old process. `kill` without `-9` may not work if the process is stuck in a goroutine.
-4. **Go version**: Requires Go 1.26+. The local machine may have an older version; cross-compile on a machine with the right Go version, or build on LD directly.
+1. **Frontend path**: Management HTML must go to `static/management.html` relative to the config directory, NOT the config directory itself. The backend auto-updater may also overwrite this file from upstream releases.
+2. **Port busy**: Use `lsof -t -i :8317` to find and `kill -9` the old process. Regular `kill` may not work if the process is stuck in a goroutine.
+3. **Go version**: Requires Go 1.26+. If your dev machine has an older version, either upgrade or build directly on the server.
+4. **Reverse proxy restart**: If you use Caddy/Nginx, restart it after restarting CLIProxyAPI to avoid stale upstream connections.
+5. **Cloudflare**: If using Cloudflare CDN in front, set SSL mode to "Full (strict)" and add a WAF skip rule for your domain to avoid blocking API requests.
+
+### Verification
+
+```bash
+# Check if service is running
+curl -s http://localhost:8317/v1/models -H "Authorization: Bearer your-api-key" | python3 -m json.tool
+
+# Test chat (Anthropic format)
+curl -s http://localhost:8317/v1/messages \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model":"claude-sonnet-4-20250514","max_tokens":50,"messages":[{"role":"user","content":"Hi"}]}'
+
+# Check logs
+tail -50 /tmp/cliproxyapi.log
+
+# Access management panel
+# Open http://localhost:8317/management.html in browser
+```
 
 ## Code Architecture
 
@@ -108,26 +172,3 @@ Three layers handle model aliases:
 - **State**: Zustand stores in `stores/`
 - **i18n**: `en.json` + `zh-CN.json` — **be careful with zh-CN.json encoding**: smart quotes (Unicode `"` `"`) in JSON cause TypeScript build errors; always validate with `python3 -c "import json; json.load(open('path'))"` after editing
 - **Quota sections**: Each provider gets a component in `components/quota/`, registered in `QuotaPage.tsx`
-
-## Testing
-
-```bash
-# Verify API is running
-curl -s https://cliproxy.qmledmq.cn/v1/models -H "Authorization: Bearer xiaoxi-cliproxy-key-2026" | python3 -m json.tool
-
-# Test specific model
-curl -s https://cliproxy.qmledmq.cn/v1/messages \
-  -H "Authorization: Bearer xiaoxi-cliproxy-key-2026" \
-  -H "Content-Type: application/json" \
-  -H "anthropic-version: 2023-06-01" \
-  -d '{"model":"claude-haiku-4-5","max_tokens":50,"messages":[{"role":"user","content":"Hi"}]}'
-
-# Check logs
-ssh ld 'tail -50 /tmp/cliproxyapi.log'
-```
-
-## Cloudflare / DNS
-
-- Domain: `qmledmq.cn` (Cloudflare DNS)
-- `cliproxy.qmledmq.cn` → LD (86.53.183.23), proxied through Cloudflare
-- Caddy handles HTTPS termination on LD, Cloudflare in Full (strict) mode

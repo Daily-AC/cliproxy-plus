@@ -100,26 +100,41 @@ func (m *AnyRouterCheckInManager) checkInAll(ctx context.Context) {
 			continue
 		}
 
+		// Query balance BEFORE check-in
+		balanceBefore := -1.0
+		if b, err := QueryBalance(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID); err == nil {
+			balanceBefore = b
+		}
+
 		result, err := CheckIn(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID)
 		if err != nil {
 			log.Errorf("anyrouter check-in failed for key %d: %v", i, err)
 			if entry.CheckIn.WebhookURL != "" {
-				_ = SendWebhook(ctx, entry.CheckIn.WebhookURL, fmt.Sprintf("AnyRouter check-in failed: %v", err))
+				_ = SendWebhookCard(ctx, entry.CheckIn.WebhookURL, &CheckInCardData{
+					Success:       false,
+					Label:         entry.Label,
+					Remark:        err.Error(),
+					BalanceBefore: balanceBefore,
+				})
 			}
 			continue
 		}
 
-		msg := fmt.Sprintf("AnyRouter check-in success! Message: %s", result)
-
-		// Query balance after check-in
-		balance, balErr := QueryBalance(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID)
-		if balErr == nil {
-			msg = fmt.Sprintf("AnyRouter check-in success! Balance: %.2f", balance)
+		// Query balance AFTER check-in
+		balanceAfter := -1.0
+		if b, err := QueryBalance(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID); err == nil {
+			balanceAfter = b
 		}
 
-		log.Infof("anyrouter check-in key %d: %s", i, msg)
+		log.Infof("anyrouter check-in key %d: success, before=%.2f after=%.2f msg=%s", i, balanceBefore, balanceAfter, result)
 		if entry.CheckIn.WebhookURL != "" {
-			_ = SendWebhook(ctx, entry.CheckIn.WebhookURL, msg)
+			_ = SendWebhookCard(ctx, entry.CheckIn.WebhookURL, &CheckInCardData{
+				Success:       true,
+				Label:         entry.Label,
+				Remark:        result,
+				BalanceBefore: balanceBefore,
+				BalanceAfter:  balanceAfter,
+			})
 		}
 	}
 }
@@ -354,8 +369,148 @@ func QueryBalance(ctx context.Context, userID, sessionID string) (float64, error
 	return result.Data.Quota / 500000.0, nil
 }
 
-// sendWebhook sends a notification to a Feishu webhook URL.
-// SendWebhook sends a notification to a Feishu webhook URL.
+// CheckInCardData holds the data for building a Feishu check-in card.
+type CheckInCardData struct {
+	Success       bool
+	Label         string  // key label (e.g. "主力")
+	Remark        string  // check-in API message or error
+	BalanceBefore float64 // -1 means unknown
+	BalanceAfter  float64 // -1 means unknown
+	Manual        bool    // true if manually triggered
+}
+
+// SendWebhookCard sends a Feishu interactive card notification.
+func SendWebhookCard(ctx context.Context, webhookURL string, d *CheckInCardData) error {
+	if strings.TrimSpace(webhookURL) == "" {
+		return nil
+	}
+
+	cst := time.FixedZone("CST", 8*3600)
+	now := time.Now().In(cst).Format("2006-01-02 15:04:05")
+
+	triggerType := "⏰ 自动签到"
+	if d.Manual {
+		triggerType = "🖱️ 手动签到"
+	}
+
+	statusIcon := "✅"
+	statusText := "签到成功"
+	headerColor := "green"
+	if !d.Success {
+		statusIcon = "❌"
+		statusText = "签到失败"
+		headerColor = "red"
+	}
+
+	label := d.Label
+	if label == "" {
+		label = "default"
+	}
+
+	// Build card body in Lark Markdown
+	var body strings.Builder
+
+	// Time + trigger type
+	body.WriteString(fmt.Sprintf("**⏱️ 时间：**%s (UTC+8)\n", now))
+	body.WriteString(fmt.Sprintf("**🏷️ 账号：**%s\n", label))
+	body.WriteString(fmt.Sprintf("**📌 触发：**%s\n", triggerType))
+
+	// Build elements array
+	elements := []map[string]interface{}{
+		{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": body.String()}},
+		{"tag": "hr"},
+	}
+
+	if d.Success {
+		var balanceSection strings.Builder
+
+		// Before
+		balanceSection.WriteString("**📍 签到前**\n")
+		if d.BalanceBefore >= 0 {
+			balanceSection.WriteString(fmt.Sprintf("　　💰 余额: **$%.2f**\n", d.BalanceBefore))
+		} else {
+			balanceSection.WriteString("　　💰 余额: *查询失败*\n")
+		}
+
+		// After
+		balanceSection.WriteString("**📍 签到后**\n")
+		if d.BalanceAfter >= 0 {
+			balanceSection.WriteString(fmt.Sprintf("　　💰 余额: **$%.2f**\n", d.BalanceAfter))
+		} else {
+			balanceSection.WriteString("　　💰 余额: *查询失败*\n")
+		}
+
+		elements = append(elements,
+			map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": balanceSection.String()}},
+			map[string]interface{}{"tag": "hr"},
+		)
+
+		// Change summary
+		var note string
+		if d.BalanceBefore >= 0 && d.BalanceAfter >= 0 {
+			diff := d.BalanceAfter - d.BalanceBefore
+			if diff > 0.001 {
+				note = fmt.Sprintf("🎉 余额变化: **+$%.2f**", diff)
+			} else if diff < -0.001 {
+				note = fmt.Sprintf("📉 余额变化: **-$%.2f**", -diff)
+			} else {
+				note = "ℹ️ 今日已签到，余额无变化"
+			}
+		} else {
+			note = fmt.Sprintf("%s %s", statusIcon, statusText)
+		}
+
+		if d.Remark != "" {
+			note += fmt.Sprintf("\n📝 备注: %s", d.Remark)
+		}
+
+		elements = append(elements,
+			map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": note}},
+		)
+	} else {
+		// Failure card
+		errMsg := fmt.Sprintf("%s **%s**\n📝 错误: %s", statusIcon, statusText, d.Remark)
+		elements = append(elements,
+			map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": errMsg}},
+		)
+	}
+
+	card := map[string]interface{}{
+		"msg_type": "interactive",
+		"card": map[string]interface{}{
+			"header": map[string]interface{}{
+				"title":    map[string]string{"tag": "plain_text", "content": "AnyRouter 签到通知"},
+				"template": headerColor,
+			},
+			"elements": elements,
+		},
+	}
+
+	data, err := json.Marshal(card)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("webhook failed with status %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+// SendWebhook sends a simple text notification to a Feishu webhook URL (legacy).
 func SendWebhook(ctx context.Context, webhookURL, message string) error {
 	if strings.TrimSpace(webhookURL) == "" {
 		return nil

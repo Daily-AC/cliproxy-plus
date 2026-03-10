@@ -96,26 +96,45 @@ func (h *Handler) PostAnyRouterCheckIn(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
+
+	// Query balance BEFORE check-in
+	balanceBefore := -1.0
+	if b, err := checkin.QueryBalance(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID); err == nil {
+		balanceBefore = b
+	}
+
 	msg, err := checkin.CheckIn(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID)
 	if err != nil {
 		if entry.CheckIn.WebhookURL != "" {
-			go checkin.SendWebhook(context.Background(), entry.CheckIn.WebhookURL, fmt.Sprintf("AnyRouter manual check-in failed: %v", err))
+			go checkin.SendWebhookCard(context.Background(), entry.CheckIn.WebhookURL, &checkin.CheckInCardData{
+				Success:       false,
+				Label:         entry.Label,
+				Remark:        err.Error(),
+				BalanceBefore: balanceBefore,
+				Manual:        true,
+			})
 		}
 		c.JSON(200, gin.H{"status": "error", "error": err.Error()})
 		return
 	}
+
+	// Query balance AFTER check-in
 	resp := gin.H{"status": "ok", "message": msg}
-	balance, balErr := checkin.QueryBalance(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID)
-	if balErr == nil {
-		resp["balance"] = balance
+	balanceAfter := -1.0
+	if b, err := checkin.QueryBalance(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID); err == nil {
+		balanceAfter = b
+		resp["balance"] = b
 	}
-	// Send webhook notification
+
 	if entry.CheckIn.WebhookURL != "" {
-		webhookMsg := fmt.Sprintf("AnyRouter manual check-in success! Message: %s", msg)
-		if balErr == nil {
-			webhookMsg = fmt.Sprintf("AnyRouter manual check-in success! Balance: %.2f", balance)
-		}
-		go checkin.SendWebhook(context.Background(), entry.CheckIn.WebhookURL, webhookMsg)
+		go checkin.SendWebhookCard(context.Background(), entry.CheckIn.WebhookURL, &checkin.CheckInCardData{
+			Success:       true,
+			Label:         entry.Label,
+			Remark:        msg,
+			BalanceBefore: balanceBefore,
+			BalanceAfter:  balanceAfter,
+			Manual:        true,
+		})
 	}
 	c.JSON(200, resp)
 }
