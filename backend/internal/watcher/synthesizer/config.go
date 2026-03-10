@@ -336,6 +336,9 @@ func (s *ConfigSynthesizer) synthesizeAnyRouterKeys(ctx *SynthesisContext) []*co
 		if key == "" {
 			continue
 		}
+		if !entry.IsEnabled() {
+			continue
+		}
 		id, token := idGen.Next("anyrouter:apikey", key)
 		attrs := map[string]string{
 			"source":   fmt.Sprintf("config:anyrouter[%s]", token),
@@ -344,6 +347,9 @@ func (s *ConfigSynthesizer) synthesizeAnyRouterKeys(ctx *SynthesisContext) []*co
 		}
 		if entry.Priority != 0 {
 			attrs["priority"] = strconv.Itoa(entry.Priority)
+		}
+		if entry.Label != "" {
+			attrs["label"] = entry.Label
 		}
 		proxyURL := strings.TrimSpace(entry.ProxyURL)
 		a := &coreauth.Auth{

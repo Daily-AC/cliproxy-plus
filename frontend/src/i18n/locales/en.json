@@ -52,7 +52,8 @@
     "model_alias_placeholder": "Model alias (optional)",
     "invalid_provider_index": "Invalid provider index.",
     "unsaved_changes_title": "Unsaved changes",
-    "unsaved_changes_message": "You have unsaved changes. Leaving now will discard them. Do you want to leave?"
+    "unsaved_changes_message": "You have unsaved changes. Leaving now will discard them. Do you want to leave?",
+    "disabled": "Disabled"
   },
   "title": {
     "main": "CLI Proxy API Management Center",
@@ -452,6 +453,9 @@
     "anyrouter_key_label": "API Key:",
     "anyrouter_key_required": "Please enter an API key",
     "anyrouter_proxy_label": "Proxy URL (optional):",
+    "anyrouter_label_field": "Label (optional):",
+    "anyrouter_label_hint": "A note to identify this key",
+    "anyrouter_enabled_label": "Enabled",
     "anyrouter_delete_title": "Delete AnyRouter Key",
     "anyrouter_delete_confirm": "Are you sure you want to delete this AnyRouter key?",
     "anyrouter_models_label": "Available Models",
@@ -936,7 +940,9 @@
     "github_copilot_oauth_status_success": "Authentication successful!",
     "github_copilot_oauth_status_error": "Authentication failed:",
     "github_copilot_oauth_start_error": "Failed to start GitHub Copilot OAuth:",
-    "github_copilot_oauth_polling_error": "Failed to check authentication status:"
+    "github_copilot_oauth_polling_error": "Failed to check authentication status:",
+    "device_code_label": "Device Code:",
+    "copy_code": "Copy"
   },
   "usage_stats": {
     "title": "Usage Statistics",
@@ -1338,7 +1344,15 @@
     "description": "Monitor OAuth quota status for Antigravity, Codex, and Gemini CLI credentials.",
     "refresh_files": "Refresh auth files",
     "refresh_files_and_quota": "Refresh files & quota",
-    "card_idle_hint": "Use the top \"Refresh files & quota\" button to fetch the latest quota data."
+    "card_idle_hint": "Use the top \"Refresh files & quota\" button to fetch the latest quota data.",
+    "anyrouter_title": "AnyRouter",
+    "anyrouter_empty": "No AnyRouter keys configured",
+    "github_copilot_title": "GitHub Copilot",
+    "github_copilot_empty": "No GitHub Copilot credentials configured",
+    "github_copilot_subscription": "Subscription Status",
+    "github_copilot_active": "Active",
+    "github_copilot_inactive": "Inactive",
+    "github_copilot_models": "Available Models"
   },
   "system_info": {
     "title": "Management Center Info",

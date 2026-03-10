@@ -514,12 +514,23 @@ type AnyRouterKey struct {
 	// Higher values are preferred; defaults to 0.
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
 
+	// Label is an optional human-readable name for this key (e.g. "主力", "备用").
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+
+	// Enabled controls whether this key is active. Defaults to true (nil = enabled).
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+
 	// CheckIn configures automatic daily sign-in for this AnyRouter account.
 	CheckIn AnyRouterCheckIn `yaml:"check-in,omitempty" json:"check-in,omitempty"`
 }
 
 func (k AnyRouterKey) GetAPIKey() string  { return k.APIKey }
 func (k AnyRouterKey) GetBaseURL() string { return "https://anyrouter.top" }
+
+// IsEnabled returns whether this key is active. A nil Enabled pointer is treated as true.
+func (k AnyRouterKey) IsEnabled() bool {
+	return k.Enabled == nil || *k.Enabled
+}
 
 // AnyRouterCheckIn configures automatic daily sign-in for an AnyRouter account.
 type AnyRouterCheckIn struct {
@@ -562,6 +573,7 @@ func (cfg *Config) SanitizeAnyRouterKeys() {
 			continue
 		}
 		entry.ProxyURL = strings.TrimSpace(entry.ProxyURL)
+		entry.Label = strings.TrimSpace(entry.Label)
 		entry.CheckIn.UserID = strings.TrimSpace(entry.CheckIn.UserID)
 		entry.CheckIn.SessionID = strings.TrimSpace(entry.CheckIn.SessionID)
 		entry.CheckIn.WebhookURL = strings.TrimSpace(entry.CheckIn.WebhookURL)

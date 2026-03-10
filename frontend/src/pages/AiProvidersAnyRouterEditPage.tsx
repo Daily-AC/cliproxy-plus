@@ -29,6 +29,8 @@ interface FormState {
   apiKey: string;
   priority?: number;
   proxyUrl: string;
+  label: string;
+  enabled: boolean;
   checkInEnabled: boolean;
   checkInUserId: string;
   checkInSessionId: string;
@@ -39,6 +41,8 @@ const buildEmptyForm = (): FormState => ({
   apiKey: '',
   priority: undefined,
   proxyUrl: '',
+  label: '',
+  enabled: true,
   checkInEnabled: false,
   checkInUserId: '',
   checkInSessionId: '',
@@ -142,6 +146,8 @@ export function AiProvidersAnyRouterEditPage() {
         apiKey: initialData.apiKey,
         priority: initialData.priority,
         proxyUrl: initialData.proxyUrl ?? '',
+        label: initialData.label ?? '',
+        enabled: initialData.enabled ?? true,
         checkInEnabled: initialData.checkIn?.enabled ?? false,
         checkInUserId: initialData.checkIn?.userId ?? '',
         checkInSessionId: initialData.checkIn?.sessionId ?? '',
@@ -174,6 +180,8 @@ export function AiProvidersAnyRouterEditPage() {
     apiKey: form.apiKey.trim(),
     priority: form.priority,
     proxyUrl: form.proxyUrl.trim() || undefined,
+    label: form.label.trim() || undefined,
+    enabled: form.enabled,
     checkIn: form.checkInEnabled
       ? {
           enabled: true,
@@ -300,6 +308,21 @@ export function AiProvidersAnyRouterEditPage() {
           <div className={styles.sectionHint}>{t('common.invalid_provider_index')}</div>
         ) : (
           <div className={styles.openaiEditForm}>
+            <Input
+              label={t('ai_providers.anyrouter_label_field')}
+              hint={t('ai_providers.anyrouter_label_hint')}
+              value={form.label}
+              onChange={(e) => setForm((prev) => ({ ...prev, label: e.target.value }))}
+              disabled={saving || disableControls}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
+              <label style={{ fontSize: '14px', fontWeight: 500 }}>{t('ai_providers.anyrouter_enabled_label')}</label>
+              <ToggleSwitch
+                checked={form.enabled}
+                onChange={(value) => setForm((prev) => ({ ...prev, enabled: value }))}
+                disabled={saving || disableControls}
+              />
+            </div>
             <Input
               label={t('ai_providers.anyrouter_key_label')}
               value={form.apiKey}

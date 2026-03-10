@@ -18,6 +18,17 @@ func GetClaudeModels() []*ModelInfo {
 			Thinking:            &ThinkingSupport{Min: 1024, Max: 128000, ZeroAllowed: true, DynamicAllowed: false},
 		},
 		{
+			ID:                  "claude-haiku-4-5",
+			Object:              "model",
+			Created:             1759276800, // 2025-10-01 (alias for claude-haiku-4-5-20251001)
+			OwnedBy:             "anthropic",
+			Type:                "claude",
+			DisplayName:         "Claude 4.5 Haiku",
+			ContextLength:       200000,
+			MaxCompletionTokens: 64000,
+			Thinking:            &ThinkingSupport{Min: 1024, Max: 128000, ZeroAllowed: true, DynamicAllowed: false},
+		},
+		{
 			ID:                  "claude-sonnet-4-5-20250929",
 			Object:              "model",
 			Created:             1759104000, // 2025-09-29

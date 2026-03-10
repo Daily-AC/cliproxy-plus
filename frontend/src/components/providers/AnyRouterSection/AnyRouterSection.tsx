@@ -2,7 +2,7 @@ import { Fragment } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import iconAnyRouter from '@/assets/icons/anyrouter.svg';
+import iconAnyRouter from '@/assets/icons/anyrouter.png';
 import type { AnyRouterKeyConfig } from '@/services/api/anyrouter';
 import { maskApiKey } from '@/utils/format';
 import styles from '@/pages/AiProvidersPage.module.scss';
@@ -54,9 +54,12 @@ export function AnyRouterSection({
           onEdit={onEdit}
           onDelete={onDelete}
           actionsDisabled={actionsDisabled}
+          getRowDisabled={(item) => item.enabled === false}
           renderContent={(item) => (
             <Fragment>
-              <div className="item-title">{t('ai_providers.anyrouter_item_title')}</div>
+              <div className="item-title">
+                {item.label || maskApiKey(item.apiKey)}
+              </div>
               <div className={styles.fieldRow}>
                 <span className={styles.fieldLabel}>{t('common.api_key')}:</span>
                 <span className={styles.fieldValue}>{maskApiKey(item.apiKey)}</span>
@@ -77,6 +80,14 @@ export function AnyRouterSection({
                 <div className={styles.fieldRow}>
                   <span className={styles.fieldLabel}>{t('ai_providers.anyrouter_checkin_title')}:</span>
                   <span className={styles.fieldValue}>{t('ai_providers.anyrouter_checkin_enabled_label')}</span>
+                </div>
+              )}
+              {item.enabled === false && (
+                <div className={styles.fieldRow}>
+                  <span className={styles.fieldLabel}>{t('common.status')}:</span>
+                  <span className={styles.fieldValue} style={{ color: 'var(--text-tertiary)' }}>
+                    {t('common.disabled')}
+                  </span>
                 </div>
               )}
             </Fragment>

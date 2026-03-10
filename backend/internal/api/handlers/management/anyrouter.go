@@ -73,81 +73,82 @@ func (h *Handler) DeleteAnyRouterKey(c *gin.Context) {
 	c.JSON(400, gin.H{"error": "missing api-key or index"})
 }
 
-// PostAnyRouterCheckIn triggers a manual check-in for all configured AnyRouter keys.
+// PostAnyRouterCheckIn triggers a manual check-in for a single AnyRouter key by index.
 func (h *Handler) PostAnyRouterCheckIn(c *gin.Context) {
 	if h.cfg == nil || len(h.cfg.AnyRouterKey) == 0 {
-		c.JSON(200, gin.H{"results": []checkin.CheckInResult{}})
+		c.JSON(200, gin.H{"status": "error", "error": "no anyrouter keys configured"})
 		return
 	}
-
+	var body struct {
+		Index int `json:"index"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		body.Index = 0
+	}
+	if body.Index < 0 || body.Index >= len(h.cfg.AnyRouterKey) {
+		c.JSON(400, gin.H{"status": "error", "error": "invalid index"})
+		return
+	}
+	entry := h.cfg.AnyRouterKey[body.Index]
+	if !entry.CheckIn.Enabled || entry.CheckIn.UserID == "" || entry.CheckIn.SessionID == "" {
+		c.JSON(200, gin.H{"status": "error", "error": "check-in not configured for this key"})
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
-
-	var results []checkin.CheckInResult
-	for i := range h.cfg.AnyRouterKey {
-		entry := h.cfg.AnyRouterKey[i]
-		if !entry.CheckIn.Enabled || entry.CheckIn.UserID == "" || entry.CheckIn.SessionID == "" {
-			continue
+	msg, err := checkin.CheckIn(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID)
+	if err != nil {
+		if entry.CheckIn.WebhookURL != "" {
+			go checkin.SendWebhook(context.Background(), entry.CheckIn.WebhookURL, fmt.Sprintf("AnyRouter manual check-in failed: %v", err))
 		}
-
-		msg, err := checkin.CheckIn(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID)
-		if err != nil {
-			results = append(results, checkin.CheckInResult{
-				Index: i,
-				Error: err.Error(),
-			})
-			continue
-		}
-
-		r := checkin.CheckInResult{
-			Index:   i,
-			Message: msg,
-		}
-
-		balance, balErr := checkin.QueryBalance(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID)
-		if balErr == nil {
-			r.Balance = balance
-		}
-
-		results = append(results, r)
+		c.JSON(200, gin.H{"status": "error", "error": err.Error()})
+		return
 	}
-
-	c.JSON(200, gin.H{"results": results})
+	resp := gin.H{"status": "ok", "message": msg}
+	balance, balErr := checkin.QueryBalance(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID)
+	if balErr == nil {
+		resp["balance"] = balance
+	}
+	// Send webhook notification
+	if entry.CheckIn.WebhookURL != "" {
+		webhookMsg := fmt.Sprintf("AnyRouter manual check-in success! Message: %s", msg)
+		if balErr == nil {
+			webhookMsg = fmt.Sprintf("AnyRouter manual check-in success! Balance: %.2f", balance)
+		}
+		go checkin.SendWebhook(context.Background(), entry.CheckIn.WebhookURL, webhookMsg)
+	}
+	c.JSON(200, resp)
 }
 
-// GetAnyRouterBalance queries balance for all configured AnyRouter keys.
+// GetAnyRouterBalance queries balance for a single AnyRouter key by index.
 func (h *Handler) GetAnyRouterBalance(c *gin.Context) {
 	if h.cfg == nil || len(h.cfg.AnyRouterKey) == 0 {
-		c.JSON(200, gin.H{"results": []checkin.BalanceResult{}})
+		c.JSON(200, gin.H{"status": "error", "error": "no anyrouter keys configured"})
 		return
 	}
-
+	var idx int
+	if idxStr := c.Query("index"); idxStr != "" {
+		if _, err := fmt.Sscanf(idxStr, "%d", &idx); err != nil {
+			idx = 0
+		}
+	}
+	if idx < 0 || idx >= len(h.cfg.AnyRouterKey) {
+		c.JSON(400, gin.H{"status": "error", "error": "invalid index"})
+		return
+	}
+	entry := h.cfg.AnyRouterKey[idx]
+	if entry.CheckIn.UserID == "" || entry.CheckIn.SessionID == "" {
+		c.JSON(200, gin.H{"status": "error", "error": "missing user-id or session-id"})
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
-
-	var results []checkin.BalanceResult
-	for i := range h.cfg.AnyRouterKey {
-		entry := h.cfg.AnyRouterKey[i]
-		if entry.CheckIn.UserID == "" || entry.CheckIn.SessionID == "" {
-			continue
-		}
-
-		balance, err := checkin.QueryBalance(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID)
-		if err != nil {
-			results = append(results, checkin.BalanceResult{
-				Index: i,
-				Error: err.Error(),
-			})
-			continue
-		}
-
-		results = append(results, checkin.BalanceResult{
-			Index:   i,
-			Balance: balance,
-		})
+	balance, err := checkin.QueryBalance(ctx, entry.CheckIn.UserID, entry.CheckIn.SessionID)
+	if err != nil {
+		c.JSON(200, gin.H{"status": "error", "error": err.Error()})
+		return
 	}
-
-	c.JSON(200, gin.H{"results": results})
+	c.JSON(200, gin.H{"status": "ok", "balance": balance})
 }
 
 func normalizeAnyRouterKey(entry *config.AnyRouterKey) {
@@ -156,6 +157,7 @@ func normalizeAnyRouterKey(entry *config.AnyRouterKey) {
 	}
 	entry.APIKey = strings.TrimSpace(entry.APIKey)
 	entry.ProxyURL = strings.TrimSpace(entry.ProxyURL)
+	entry.Label = strings.TrimSpace(entry.Label)
 	entry.CheckIn.UserID = strings.TrimSpace(entry.CheckIn.UserID)
 	entry.CheckIn.SessionID = strings.TrimSpace(entry.CheckIn.SessionID)
 	entry.CheckIn.WebhookURL = strings.TrimSpace(entry.CheckIn.WebhookURL)

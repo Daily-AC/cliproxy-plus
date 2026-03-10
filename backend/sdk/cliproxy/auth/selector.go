@@ -122,6 +122,12 @@ func authPriority(auth *Auth) int {
 	return parsed
 }
 
+// globalModelAliases maps short/alias model names to their canonical full names.
+// This allows clients to request using short names while routing resolves to the full version.
+var globalModelAliases = map[string]string{
+	"claude-haiku-4-5": "claude-haiku-4-5-20251001",
+}
+
 func canonicalModelKey(model string) string {
 	model = strings.TrimSpace(model)
 	if model == "" {
@@ -131,6 +137,10 @@ func canonicalModelKey(model string) string {
 	modelName := strings.TrimSpace(parsed.ModelName)
 	if modelName == "" {
 		return model
+	}
+	// Resolve global model aliases
+	if canonical, ok := globalModelAliases[modelName]; ok {
+		return canonical
 	}
 	return modelName
 }

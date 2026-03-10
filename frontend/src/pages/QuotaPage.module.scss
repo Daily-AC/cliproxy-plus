@@ -106,7 +106,8 @@
 .claudeGrid,
 .codexGrid,
 .geminiCliGrid,
-.kimiGrid {
+.kimiGrid,
+.anyRouterGrid {
   display: grid;
   gap: $spacing-md;
   grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
@@ -179,6 +180,12 @@
   background-image: linear-gradient(180deg,
       rgba(255, 244, 229, 0.2),
       rgba(255, 244, 229, 0));
+}
+
+.anyRouterCard {
+  background-image: linear-gradient(180deg,
+      rgba(200, 180, 255, 0.15),
+      rgba(200, 180, 255, 0));
 }
 
 .quotaSection {

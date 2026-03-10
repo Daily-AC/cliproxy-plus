@@ -11,7 +11,7 @@ import iconCodexDark from '@/assets/icons/codex_drak.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconVertex from '@/assets/icons/vertex.svg';
 import iconAmp from '@/assets/icons/amp.svg';
-import iconAnyRouter from '@/assets/icons/anyrouter.svg';
+import iconAnyRouter from '@/assets/icons/anyrouter.png';
 import styles from './ProviderNav.module.scss';
 
 export type ProviderId = 'gemini' | 'codex' | 'claude' | 'vertex' | 'ampcode' | 'anyrouter' | 'openai';

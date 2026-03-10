@@ -423,6 +423,8 @@ func (s *Service) ensureExecutorsForAuthWithMode(a *coreauth.Auth, forceReplace 
 		s.coreManager.RegisterExecutor(executor.NewClaudeExecutor(s.cfg))
 	case "anyrouter":
 		s.coreManager.RegisterExecutor(executor.NewAnyRouterExecutor(s.cfg))
+	case "github-copilot":
+		s.coreManager.RegisterExecutor(executor.NewGithubCopilotExecutor(s.cfg))
 	case "qwen":
 		s.coreManager.RegisterExecutor(executor.NewQwenExecutor(s.cfg))
 	case "iflow":
@@ -935,6 +937,7 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 		}
 	}
 	models = applyOAuthModelAlias(s.cfg, provider, authKind, models)
+	models = applyGlobalModelAliases(models)
 	if len(models) > 0 {
 		key := provider
 		if key == "" {
@@ -1480,4 +1483,44 @@ func applyOAuthModelAlias(cfg *config.Config, provider, authKind string, models 
 		}
 	}
 	return out
+}
+
+// globalModelAliasesForRegistry maps canonical model IDs to short alias IDs.
+// When a provider registers the canonical model, the alias is also registered
+// so it appears in /v1/models and can be requested directly by clients.
+var globalModelAliasesForRegistry = map[string]string{
+	"claude-haiku-4-5-20251001": "claude-haiku-4-5",
+}
+
+func applyGlobalModelAliases(models []*ModelInfo) []*ModelInfo {
+	if len(models) == 0 {
+		return models
+	}
+	existing := make(map[string]struct{}, len(models))
+	for _, m := range models {
+		if m != nil {
+			existing[strings.ToLower(strings.TrimSpace(m.ID))] = struct{}{}
+		}
+	}
+	var extras []*ModelInfo
+	for _, m := range models {
+		if m == nil {
+			continue
+		}
+		alias, ok := globalModelAliasesForRegistry[strings.TrimSpace(m.ID)]
+		if !ok {
+			continue
+		}
+		if _, exists := existing[strings.ToLower(alias)]; exists {
+			continue
+		}
+		clone := *m
+		clone.ID = alias
+		extras = append(extras, &clone)
+		existing[strings.ToLower(alias)] = struct{}{}
+	}
+	if len(extras) == 0 {
+		return models
+	}
+	return append(models, extras...)
 }

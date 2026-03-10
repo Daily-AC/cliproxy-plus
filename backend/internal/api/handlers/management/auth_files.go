@@ -26,6 +26,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/codex"
 	geminiAuth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/gemini"
 	iflowauth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/iflow"
+	githubauth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/github"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/kimi"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/qwen"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/interfaces"
@@ -977,6 +978,20 @@ func (h *Handler) tokenStoreWithBaseDir() coreauth.Store {
 	return store
 }
 
+func (h *Handler) listAuthsByProvider(provider string) ([]*coreauth.Auth, error) {
+	if h.authManager == nil {
+		return nil, fmt.Errorf("auth manager not initialized")
+	}
+	all := h.authManager.List()
+	var matched []*coreauth.Auth
+	for _, a := range all {
+		if a != nil && strings.EqualFold(strings.TrimSpace(a.Provider), provider) {
+			matched = append(matched, a)
+		}
+	}
+	return matched, nil
+}
+
 func (h *Handler) saveTokenRecord(ctx context.Context, record *coreauth.Auth) (string, error) {
 	if record == nil {
 		return "", fmt.Errorf("token record is nil")
@@ -1839,6 +1854,144 @@ func (h *Handler) RequestKimiToken(c *gin.Context) {
 	}()
 
 	c.JSON(200, gin.H{"status": "ok", "url": authURL, "state": state})
+}
+
+func (h *Handler) RequestGithubCopilotToken(c *gin.Context) {
+	ctx := context.Background()
+	ctx = PopulateAuthContext(ctx, c)
+
+	log.Info("github-copilot: initializing device flow authentication...")
+
+	state := fmt.Sprintf("ghc-%d", time.Now().UnixNano())
+	ghAuth := githubauth.NewGithubCopilotAuth(h.cfg)
+
+	deviceFlow, errStartDeviceFlow := ghAuth.StartDeviceFlow(ctx)
+	if errStartDeviceFlow != nil {
+		log.Errorf("Failed to start GitHub device flow: %v", errStartDeviceFlow)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start device flow"})
+		return
+	}
+	authURL := deviceFlow.VerificationURI
+
+	RegisterOAuthSession(state, "github-copilot")
+
+	go func() {
+		log.Info("github-copilot: waiting for device flow authorization...")
+		tokenData, errPoll := ghAuth.PollForToken(ctx, deviceFlow)
+		if errPoll != nil {
+			SetOAuthSessionError(state, "Authentication failed")
+			log.Errorf("github-copilot: authentication failed: %v", errPoll)
+			return
+		}
+
+		log.Info("github-copilot: token received, saving...")
+		tokenStorage := ghAuth.CreateTokenStorage(tokenData)
+
+		// Try to fetch GitHub username for the label
+		label := "GitHub Copilot"
+		login, errLogin := ghAuth.FetchUserLogin(ctx, tokenData.AccessToken)
+		if errLogin == nil && login != "" {
+			label = login
+			log.Infof("github-copilot: resolved username: %s", login)
+		} else if errLogin != nil {
+			log.Warnf("github-copilot: failed to fetch username: %v", errLogin)
+		}
+
+		metadata := map[string]any{
+			"type":         "github-copilot",
+			"access_token": tokenData.AccessToken,
+			"token_type":   tokenData.TokenType,
+			"scope":        tokenData.Scope,
+			"timestamp":    time.Now().UnixMilli(),
+		}
+
+		fileName := fmt.Sprintf("github-copilot-%d.json", time.Now().UnixMilli())
+		record := &coreauth.Auth{
+			ID:       fileName,
+			Provider: "github-copilot",
+			FileName: fileName,
+			Label:    label,
+			Storage:  tokenStorage,
+			Metadata: metadata,
+		}
+		savedPath, errSave := h.saveTokenRecord(ctx, record)
+		if errSave != nil {
+			log.Errorf("github-copilot: failed to save tokens: %v", errSave)
+			SetOAuthSessionError(state, "Failed to save authentication tokens")
+			return
+		}
+
+		log.Infof("github-copilot: authentication successful! Token saved to %s", savedPath)
+		CompleteOAuthSession(state)
+		CompleteOAuthSessionsByProvider("github-copilot")
+	}()
+
+	c.JSON(200, gin.H{"status": "ok", "url": authURL, "user_code": deviceFlow.UserCode, "state": state})
+}
+
+// GithubCopilotQuota returns subscription status, available models, and rate limit info for GitHub Copilot.
+func (h *Handler) GithubCopilotQuota(c *gin.Context) {
+	ctx := context.Background()
+	ctx = PopulateAuthContext(ctx, c)
+
+	// Find all github-copilot auth files
+	auths, errList := h.listAuthsByProvider("github-copilot")
+	if errList != nil || len(auths) == 0 {
+		c.JSON(200, gin.H{
+			"status":  "no_auth",
+			"message": "No GitHub Copilot credentials configured",
+		})
+		return
+	}
+
+	results := make([]gin.H, 0, len(auths))
+	for _, auth := range auths {
+		token := ""
+		if auth.Metadata != nil {
+			if t, ok := auth.Metadata["access_token"].(string); ok {
+				token = t
+			}
+		}
+		if token == "" {
+			results = append(results, gin.H{
+				"id":     auth.ID,
+				"label":  auth.Label,
+				"status": "error",
+				"error":  "missing access token",
+			})
+			continue
+		}
+
+		// Exchange GitHub token for Copilot API token to verify subscription
+		copilotToken, models, err := githubauth.CheckCopilotAccess(ctx, h.cfg, token)
+		if err != nil {
+			results = append(results, gin.H{
+				"id":     auth.ID,
+				"label":  auth.Label,
+				"status": "error",
+				"error":  err.Error(),
+			})
+			continue
+		}
+
+		result := gin.H{
+			"id":     auth.ID,
+			"label":  auth.Label,
+			"status": "active",
+		}
+		if copilotToken != "" {
+			result["subscription"] = "active"
+		}
+		if len(models) > 0 {
+			result["models"] = models
+		}
+		results = append(results, result)
+	}
+
+	c.JSON(200, gin.H{
+		"status":  "ok",
+		"entries": results,
+	})
 }
 
 func (h *Handler) RequestIFlowToken(c *gin.Context) {

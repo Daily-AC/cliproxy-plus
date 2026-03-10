@@ -1,9 +1,3 @@
-/**
- * AnyRouter balance quota section.
- * Unlike other quota sections that work with auth files,
- * this one directly queries the AnyRouter balance API.
- */
-
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
@@ -16,6 +10,7 @@ import styles from '@/pages/QuotaPage.module.scss';
 interface BalanceEntry {
   index: number;
   apiKey: string;
+  label?: string;
   balance: number | null;
   loading: boolean;
   error?: string;
@@ -35,6 +30,7 @@ export function AnyRouterQuotaSection({ disabled }: { disabled: boolean }) {
       setEntries(data.map((key, index) => ({
         index,
         apiKey: key.apiKey,
+        label: key.label,
         balance: null,
         loading: false,
       })));
@@ -80,6 +76,17 @@ export function AnyRouterQuotaSection({ disabled }: { disabled: boolean }) {
 
   if (keys.length === 0 && !loading) return null;
 
+  const anyRouterBadgeStyle = {
+    backgroundColor: '#ede9fe',
+    color: '#7c3aed',
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: 600 as const,
+    whiteSpace: 'nowrap' as const,
+    flexShrink: 0,
+  };
+
   return (
     <Card
       title={
@@ -109,39 +116,59 @@ export function AnyRouterQuotaSection({ disabled }: { disabled: boolean }) {
           {t('quota_management.anyrouter_empty')}
         </div>
       ) : (
-        <div className={styles.quotaSection}>
-          {entries.map((entry) => (
-            <div key={entry.index} className={styles.quotaRow}>
-              <div className={styles.quotaRowHeader}>
-                <span className={styles.quotaModel}>
-                  {maskApiKey(entry.apiKey)}
-                </span>
-                <div className={styles.quotaMeta}>
-                  {entry.loading ? (
-                    <span className={styles.quotaPercent}>{t('common.loading')}</span>
-                  ) : entry.balance !== null ? (
-                    <span className={styles.quotaPercent}>{entry.balance}</span>
-                  ) : entry.error ? (
-                    <span className={styles.quotaPercent}>{t('common.error')}</span>
-                  ) : (
-                    <span className={styles.quotaPercent}>--</span>
+        <div className={styles.anyRouterGrid}>
+          {entries.map((entry, idx) => {
+            const key = keys[idx];
+            const isDisabled = key?.enabled === false;
+            return (
+              <div
+                key={entry.index}
+                className={`${styles.fileCard} ${styles.anyRouterCard}`}
+                style={isDisabled ? { opacity: 0.6 } : undefined}
+              >
+                <div className={styles.cardHeader}>
+                  <span style={anyRouterBadgeStyle}>AnyRouter</span>
+                  <span className={styles.fileName}>
+                    {entry.label || maskApiKey(entry.apiKey)}
+                  </span>
+                </div>
+                <div className={styles.quotaSection}>
+                  <div className={styles.quotaRow}>
+                    <div className={styles.quotaRowHeader}>
+                      <span className={styles.quotaModel}>
+                        {t('ai_providers.anyrouter_balance_label')}
+                      </span>
+                      <div className={styles.quotaMeta}>
+                        {entry.loading ? (
+                          <span className={styles.quotaPercent}>{t('common.loading')}</span>
+                        ) : entry.balance !== null ? (
+                          <span className={styles.quotaPercent}>{entry.balance.toFixed(2)}</span>
+                        ) : entry.error ? (
+                          <span className={styles.quotaPercent} style={{ color: 'var(--danger-color)' }}>
+                            {t('common.error')}
+                          </span>
+                        ) : (
+                          <span className={styles.quotaPercent}>--</span>
+                        )}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void refreshBalance(entry.index)}
+                          disabled={disabled || entry.loading}
+                          style={{ padding: '2px 8px', fontSize: '11px' }}
+                        >
+                          <IconRefreshCw size={12} />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  {entry.error && (
+                    <div className={styles.quotaError}>{entry.error}</div>
                   )}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void refreshBalance(entry.index)}
-                    disabled={disabled || entry.loading}
-                    style={{ padding: '2px 8px', fontSize: '11px' }}
-                  >
-                    {t('common.refresh')}
-                  </Button>
                 </div>
               </div>
-              {entry.error && (
-                <div className={styles.quotaError}>{entry.error}</div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Card>

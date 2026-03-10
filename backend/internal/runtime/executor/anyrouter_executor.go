@@ -29,6 +29,19 @@ const (
 	ccIdentifier = "You are Claude Code, Anthropic's official CLI for Claude."
 )
 
+// anyRouterModelAliases maps short model aliases to their full upstream model names.
+var anyRouterModelAliases = map[string]string{
+	"claude-haiku-4-5": "claude-haiku-4-5-20251001",
+}
+
+// resolveAnyRouterModel resolves a model alias to the upstream model name.
+func resolveAnyRouterModel(model string) string {
+	if upstream, ok := anyRouterModelAliases[model]; ok {
+		return upstream
+	}
+	return model
+}
+
 // AnyRouterExecutor handles requests to AnyRouter with custom request transformation.
 // AnyRouter requires specific request format transformations to pass validation.
 type AnyRouterExecutor struct {
@@ -54,11 +67,13 @@ func (e *AnyRouterExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 	reporter := newUsageReporter(ctx, e.Identifier(), baseModel, auth)
 	defer reporter.trackFailure(ctx, &err)
 
+	upstreamModel := resolveAnyRouterModel(baseModel)
+
 	from := opts.SourceFormat
 	to := sdktranslator.FromString("claude")
 	stream := from != to
 	body := sdktranslator.TranslateRequest(from, to, baseModel, req.Payload, stream)
-	body, _ = sjson.SetBytes(body, "model", baseModel)
+	body, _ = sjson.SetBytes(body, "model", upstreamModel)
 
 	body, err = thinking.ApplyThinking(body, req.Model, from.String(), to.String(), e.Identifier())
 	if err != nil {
@@ -168,13 +183,15 @@ func (e *AnyRouterExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 		return nil, fmt.Errorf("anyrouter: missing api key")
 	}
 
+	upstreamModel := resolveAnyRouterModel(baseModel)
+
 	reporter := newUsageReporter(ctx, e.Identifier(), baseModel, auth)
 	defer reporter.trackFailure(ctx, &err)
 
 	from := opts.SourceFormat
 	to := sdktranslator.FromString("claude")
 	body := sdktranslator.TranslateRequest(from, to, baseModel, req.Payload, true)
-	body, _ = sjson.SetBytes(body, "model", baseModel)
+	body, _ = sjson.SetBytes(body, "model", upstreamModel)
 
 	body, err = thinking.ApplyThinking(body, req.Model, from.String(), to.String(), e.Identifier())
 	if err != nil {
